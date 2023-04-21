@@ -7,7 +7,6 @@
 package zad1;
 
 
-import java.io.*;
 import java.nio.file.*;
 import java.util.*;
 import java.util.concurrent.*;
@@ -49,6 +48,6 @@ public class Main {
     System.out.println("\n=== Server log ===");
     System.out.println(s.getServerLog());
 
-    ctasks.forEach(t -> System.out.println(t.getClient().getChatView()));
+    ctasks.forEach(t -> System.out.println(t.getClient().getClientChatView()));
   }
 }

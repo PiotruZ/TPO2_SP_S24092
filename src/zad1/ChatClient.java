@@ -7,88 +7,72 @@
 package zad1;
 
 
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.OutputStreamWriter;
-import java.io.PrintWriter;
-import java.net.Socket;
-import java.nio.charset.StandardCharsets;
+import java.net.InetSocketAddress;
+import java.nio.ByteBuffer;
+import java.nio.channels.SocketChannel;
+import java.nio.charset.Charset;
 
-public class ChatClient {
-    private String host;
-    private int port;
-    private String id;
-    private Socket socket;
-    private BufferedReader in;
-    private PrintWriter out;
-    private StringBuilder chatView;
+public class ChatClient extends Thread {
+    private SocketChannel channel;
+    private final StringBuilder clientChatView;
+    private final String clientId;
 
-    public ChatClient(String host, int port, String id) {
-        this.host = host;
-        this.port = port;
-        this.id = id;
-        this.chatView = new StringBuilder();
+    public ChatClient(String host, int port, String clientId) {
+        try {
+            channel = SocketChannel.open(new InetSocketAddress(host, port));                                      // opening channel, connecting to the address
+            channel.configureBlocking(false);                                                                     // making it none-blocking
+        } catch (IOException ignored) { }
+        this.clientChatView = new StringBuilder("=== " + clientId + " chat view" + "\n");
+        this.clientId = clientId;
     }
+
     public void login() {
+        this.start();
+        this.send("logged in");
+    }
+
+    public void logout() throws InterruptedException {
+        this.send("logged out");
+        Thread.sleep(100);
+        this.interrupt();
+    }
+
+    public void send(String req) {
+        ByteBuffer byteBuffer = Charset.forName("ISO-8859-2").encode(clientId + ": " + req + "STOP");                      // encoding req with encoding, because of Polish tokens
         try {
-            socket = new Socket(host, port);
-            in = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
-            out = new PrintWriter(new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8), true);
-            out.println(id);
-            Thread receiverThread = new Thread(new Receiver());
-            receiverThread.start();
-            chatView.append("Connected to server: " + host + ":" + port + "\n");
-            chatView.append(id + " logged in" + "\n");
-            System.out.println(chatView);
-        } catch (IOException e) {
-            chatView.append("Error occurred while connecting to server: " + e.getMessage() + "\n");
-        }
+            Thread.sleep(50);
+            channel.write(byteBuffer);                                                                            // sending req
+        } catch (IOException exception) {
+            send(req);
+        } catch (InterruptedException ignored) { }
     }
 
-    public void logout() {
+    public String getClientChatView() {
+        return clientChatView.toString().replace("STOP", "\n");
+    }
+
+    @Override
+    public void run() {
         try {
-            if (socket != null && socket.isConnected()) {
-                out.println("/logout");
-                socket.close();
-                chatView.append(id+" logged out\n");;
-                System.out.println(chatView);
-            }
-        } catch (IOException e) {
-            chatView.append("Error occurred while logging out: " + e.getMessage() + "\n");
-        }
-    }
+            while (!isInterrupted()) {                                                                                  // reading while Thread is not interrupted
+                ByteBuffer byteBuffer = ByteBuffer.allocate(256);
+                StringBuilder request = new StringBuilder();
 
-    public void send(String message) {
-        try {
-            out.println(message);
-            chatView.append(message+"\n");
-            System.out.println(chatView);
-        } catch (Exception e) {
-            chatView.append("Error occurred while sending message: " + e.getMessage() + "\n");
-        }
-    }
-
-    public String getChatView() {
-        System.out.println("=== "+id+" chat view");
-        return chatView.toString();
-    }
-
-    private class Receiver implements Runnable {
-        @Override
-        public void run() {
-            try {
-                String line;
-                while ((line = in.readLine()) != null) {
-                    synchronized(chatView) {
-                        chatView.append(line + "\n");
-                    }
+                while (channel.read(byteBuffer) > 0) {
+                    byteBuffer.flip();                                                                                  // making buffer ready for a new sequence
+                    request.append(Charset.forName("ISO-8859-2").decode(byteBuffer));                                   // reading what is sent to that client
+                    byteBuffer.clear();                                                                                 // cleaning buffer after receiving sequence
                 }
-            } catch (IOException e) {
-                chatView.append("Error occurred while receiving message: " + e.getMessage() + "\n");
+
+                if (!request.toString().isEmpty())
+                    clientChatView.append(request);                                                                           // appending ChatView with received sequence
             }
-        }
+        } catch (IOException ignored) { }
     }
 }
+
+
+
 
 
