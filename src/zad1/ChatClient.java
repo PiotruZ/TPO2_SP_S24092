@@ -6,73 +6,97 @@
 
 package zad1;
 
-
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
+import java.nio.channels.SelectionKey;
+import java.nio.channels.Selector;
 import java.nio.channels.SocketChannel;
 import java.nio.charset.Charset;
+import java.util.Iterator;
 
-public class ChatClient extends Thread {
-    private SocketChannel channel;
-    private final StringBuilder clientChatView;
-    private final String clientId;
+public class ChatClient implements Runnable {
+    private final SocketChannel channel;
+    private final StringBuilder chatView;
+    private final String id;
 
-    public ChatClient(String host, int port, String clientId) {
-        try {
-            channel = SocketChannel.open(new InetSocketAddress(host, port));                                      // opening channel, connecting to the address
-            channel.configureBlocking(false);                                                                     // making it none-blocking
-        } catch (IOException ignored) { }
-        this.clientChatView = new StringBuilder("=== " + clientId + " chat view" + "\n");
-        this.clientId = clientId;
+    public ChatClient(String host, int port, String id) throws IOException {
+        channel = SocketChannel.open(new InetSocketAddress(host, port));
+        channel.configureBlocking(false);
+        this.chatView = new StringBuilder("=== " + id + " chat view" + "\n");
+        this.id = id;
     }
 
     public void login() {
-        this.start();
+        new Thread(this).start();
         this.send("logged in");
     }
 
-    public void logout() throws InterruptedException {
-        this.send("logged out");
-        Thread.sleep(100);
-        this.interrupt();
+    public void logout() throws InterruptedException, IOException {
+        String message = "logged out";
+        this.send(message);
+        chatView.append(id).append(": ").append(message).append("\n");
+        channel.close();
     }
+
 
     public void send(String req) {
-        ByteBuffer byteBuffer = Charset.forName("ISO-8859-2").encode(clientId + ": " + req + "STOP");                      // encoding req with encoding, because of Polish tokens
+        ByteBuffer byteBuffer = Charset.forName("ISO-8859-2").encode(id + ": " + req + "\n");
         try {
             Thread.sleep(50);
-            channel.write(byteBuffer);                                                                            // sending req
-        } catch (IOException exception) {
-            send(req);
-        } catch (InterruptedException ignored) { }
+            channel.write(byteBuffer);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
     }
 
-    public String getClientChatView() {
-        return clientChatView.toString().replace("STOP", "\n");
+    public String getChatView() {
+        return chatView.toString();
     }
 
     @Override
     public void run() {
         try {
-            while (!isInterrupted()) {                                                                                  // reading while Thread is not interrupted
-                ByteBuffer byteBuffer = ByteBuffer.allocate(256);
-                StringBuilder request = new StringBuilder();
+            Selector selector = Selector.open();
+            channel.register(selector, SelectionKey.OP_READ);
 
-                while (channel.read(byteBuffer) > 0) {
-                    byteBuffer.flip();                                                                                  // making buffer ready for a new sequence
-                    request.append(Charset.forName("ISO-8859-2").decode(byteBuffer));                                   // reading what is sent to that client
-                    byteBuffer.clear();                                                                                 // cleaning buffer after receiving sequence
+            while (!Thread.currentThread().isInterrupted() && channel.isOpen() && channel.isConnected()) {
+                selector.select();
+
+                Iterator<SelectionKey> selectedKeys = selector.selectedKeys().iterator();
+                while (selectedKeys.hasNext()) {
+                    SelectionKey key = selectedKeys.next();
+                    if (key.isReadable()) {
+                        ByteBuffer byteBuffer = ByteBuffer.allocate(256);
+                        StringBuilder request = new StringBuilder();
+
+                        int bytesRead = channel.read(byteBuffer);
+                        if (bytesRead == -1) {
+                            channel.close();
+                            break;
+                        }
+
+                        if (bytesRead > 0) {
+                            byteBuffer.flip();
+                            request.append(Charset.forName("ISO-8859-2").decode(byteBuffer));
+                        }
+
+                        if (!request.toString().isEmpty()) {
+                            chatView.append(request);
+                        }
+                    }
+                    selectedKeys.remove();
                 }
-
-                if (!request.toString().isEmpty())
-                    clientChatView.append(request);                                                                           // appending ChatView with received sequence
             }
-        } catch (IOException ignored) { }
+
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
+
+
+
 }
-
-
-
-
-

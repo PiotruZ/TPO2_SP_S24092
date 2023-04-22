@@ -48,6 +48,6 @@ public class Main {
     System.out.println("\n=== Server log ===");
     System.out.println(s.getServerLog());
 
-    ctasks.forEach(t -> System.out.println(t.getClient().getClientChatView()));
+    ctasks.forEach(t -> System.out.println(t.getClient().getChatView()));
   }
 }
