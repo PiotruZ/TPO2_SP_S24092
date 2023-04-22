@@ -41,11 +41,10 @@ public class ChatClient implements Runnable {
         this.send(message);
         lock.lock();
         try {
-            chatView.append(id).append(": ").append(message).append("\n");
+            chatView.append(id).append(" ").append(message).append("\n");
         } finally {
             lock.unlock();
         }
-        Thread.sleep(50);
         channel.close();
     }
 

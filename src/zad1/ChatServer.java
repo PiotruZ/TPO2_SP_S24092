@@ -9,16 +9,18 @@ import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.*;
 import java.nio.charset.Charset;
+import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.*;
 
 public class ChatServer implements Runnable {
-    private static final HashMap<String, SocketChannel> clients = new HashMap<>();
+    private static final Map<String, SocketChannel> clients = Collections.synchronizedMap(new HashMap<>());
+    private static final DateFormat dateFormat = new SimpleDateFormat("HH:mm:ss.SSS");
     private ServerSocketChannel serverSocketChannel;
     private final StringBuilder serverLog;
     private Selector selector;
     private int activeConnections = 0;
-    private Thread thread;
+    private final Thread thread;
 
     public ChatServer(String host, int port) {
         try {
@@ -111,16 +113,18 @@ public class ChatServer implements Runnable {
 
     private void handleLogout(String request, SocketChannel socketChannel) throws IOException {
         String ID = request.substring(0, request.indexOf(":"));
-        clients.get(ID).write(Charset.forName("ISO-8859-2").encode(request.replace(": logged", " logged")));
+        clients.get(ID).write(Charset.forName("ISO-8859-2").encode(request));
         clients.remove(ID);
+        activeConnections--;
     }
 
-
     private synchronized void handleRequest(String request) throws IOException {
-        serverLog.append(new SimpleDateFormat("HH:mm:ss.SSS").format(System.currentTimeMillis())).append(" ").append(request);
+        String messageToSend = request.replaceAll(": logged", " logged");
+        String logMessage = dateFormat.format(new Date()) + " " + messageToSend;
+        serverLog.append(logMessage);
 
         for (Map.Entry<String, SocketChannel> entry : clients.entrySet()) {
-            entry.getValue().write(Charset.forName("ISO-8859-2").encode(request));
+            entry.getValue().write(Charset.forName("ISO-8859-2").encode(messageToSend));
         }
     }
 
