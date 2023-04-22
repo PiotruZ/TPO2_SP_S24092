@@ -12,12 +12,13 @@ import java.nio.charset.Charset;
 import java.text.SimpleDateFormat;
 import java.util.*;
 
-public class ChatServer extends Thread {
+public class ChatServer implements Runnable {
     private static final HashMap<String, SocketChannel> clients = new HashMap<>();
     private ServerSocketChannel serverSocketChannel;
     private final StringBuilder serverLog;
     private Selector selector;
     private int activeConnections = 0;
+    private Thread thread;
 
     public ChatServer(String host, int port) {
         try {
@@ -27,15 +28,17 @@ public class ChatServer extends Thread {
 
             selector = Selector.open();                                                                                 // Selector declaration
             serverSocketChannel.register(selector, serverSocketChannel.validOps());                                     // registering selector
-        } catch (IOException ignored) {
+        } catch (IOException e) {
+            e.printStackTrace();
         }
         serverLog = new StringBuilder();
+        thread = new Thread(this);
     }
 
     @Override
     public void run() {
         try {
-            while (!isInterrupted()) {
+            while (!Thread.currentThread().isInterrupted()) {
                 selector.select();
 
                 Set<SelectionKey> keys = selector.selectedKeys();
@@ -113,13 +116,14 @@ public class ChatServer extends Thread {
     }
 
 
-    private void handleRequest(String request) throws IOException {
+    private synchronized void handleRequest(String request) throws IOException {
         serverLog.append(new SimpleDateFormat("HH:mm:ss.SSS").format(System.currentTimeMillis())).append(" ").append(request);
 
         for (Map.Entry<String, SocketChannel> entry : clients.entrySet()) {
             entry.getValue().write(Charset.forName("ISO-8859-2").encode(request));
         }
     }
+
 
     private void handleShutdown() throws InterruptedException {
         synchronized(this) {
@@ -130,9 +134,8 @@ public class ChatServer extends Thread {
         }
     }
 
-
     public void startServer() {
-        this.start();
+        thread.start();
         System.out.println("Server started" + "\n");
     }
 
@@ -142,11 +145,11 @@ public class ChatServer extends Thread {
                 this.wait();
             }
         }
-        this.interrupt();
+        thread.interrupt();
         System.out.println("Server stopped");
     }
 
     public String getServerLog() {
-        return String.valueOf(serverLog);
+        return serverLog.toString();
     }
 }
